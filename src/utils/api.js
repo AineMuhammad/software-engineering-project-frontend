@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://software-engineering-project-backend.onrender.com/api';
 
 // SWR Fetcher function
 export const fetcher = async (url, options = {}) => {
