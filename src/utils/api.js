@@ -17,11 +17,29 @@ export const fetcher = async (url, options = {}) => {
   }
 
   const response = await fetch(`${API_BASE_URL}${url}`, config);
-  const data = await response.json();
+  
+  // Handle non-JSON responses
+  let data;
+  try {
+    data = await response.json();
+  } catch (e) {
+    // If response is not JSON, create error from status
+    if (!response.ok) {
+      const error = new Error(response.statusText || 'Request failed');
+      error.status = response.status;
+      throw error;
+    }
+    return {};
+  }
 
   if (!response.ok) {
     const error = new Error(data.message || 'Request failed');
     error.status = response.status;
+    // Clear token on 401 errors
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
     throw error;
   }
 

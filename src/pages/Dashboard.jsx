@@ -50,12 +50,15 @@ const Dashboard = () => {
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(null);
 
-  // Check authentication
+  // Check authentication and validate token
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       navigate('/signin');
+      return;
     }
+    // Token exists, but we'll validate it via the API call below
+    // If the API call fails with 401, we'll redirect in the error handler
   }, [navigate]);
 
   // Request user location permission
@@ -122,14 +125,34 @@ const Dashboard = () => {
   }, []);
 
   // Fetch user data using SWR
-  const { data: userData, isLoading: userLoading } = useSWR(
+  const { data: userData, isLoading: userLoading, error: userError } = useSWR(
     '/user/me',
     getCurrentUserFetcher,
     {
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
+      onError: (error) => {
+        // If authentication fails (401), redirect to signin
+        if (error.status === 401 || error.message?.includes('token') || error.message?.includes('Unauthorized')) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/signin');
+        }
+      },
     }
   );
+
+  // Handle authentication errors
+  useEffect(() => {
+    if (userError) {
+      // Check if it's an authentication error
+      if (userError.status === 401 || userError.message?.includes('token') || userError.message?.includes('Unauthorized')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/signin');
+      }
+    }
+  }, [userError, navigate]);
 
   // Update context when user data changes
   useEffect(() => {
