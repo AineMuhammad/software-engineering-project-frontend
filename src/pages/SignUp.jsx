@@ -14,7 +14,7 @@ import { Google as GoogleIcon, Visibility, VisibilityOff, Email, Lock, Person, T
 import { motion } from 'framer-motion';
 import { auth, googleProvider } from '../firebaseConfig';
 import toast from 'react-hot-toast';
-import { signupFetcher, setAuthToken } from '../utils/api';
+import { signupFetcher, signinFetcher, setAuthToken } from '../utils/api';
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -27,13 +27,61 @@ const SignUp = () => {
 
   // SWR Mutation for signup
   const { trigger: signup, isMutating: loading } = useSWRMutation('/signup', signupFetcher);
+  // SWR Mutation for signin (used for Google auth)
+  const { trigger: signin } = useSWRMutation('/signin', signinFetcher);
 
   const handleGoogleSignUp = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-      toast.success('Account created successfully!');
-      navigate('/dashboard');
+      // Sign in with Firebase Google
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      
+      // Get Firebase ID token
+      const firebaseToken = await user.getIdToken();
+      
+      // Call backend signin with Firebase token (it will create user if doesn't exist)
+      try {
+        const response = await signin({ 
+          firebaseToken: firebaseToken 
+        });
+        
+        if (response.success && response.token) {
+          // Store backend JWT token
+          setAuthToken(response.token);
+          if (response.user) {
+            localStorage.setItem('user', JSON.stringify(response.user));
+          }
+          toast.success('Account created successfully!');
+          navigate('/dashboard');
+        }
+      } catch (backendError) {
+        console.error('Backend signin error:', backendError);
+        toast.error('Failed to authenticate with server. Please try again.');
+        await auth.signOut();
+      }
     } catch (error) {
+      // Suppress COOP warning
+      if (error.message && (
+        error.message.includes('Cross-Origin-Opener-Policy') ||
+        error.message.includes('window.close')
+      )) {
+        if (auth.currentUser) {
+          try {
+            const firebaseToken = await auth.currentUser.getIdToken();
+            const response = await signin({ firebaseToken });
+            if (response.success && response.token) {
+              setAuthToken(response.token);
+              if (response.user) localStorage.setItem('user', JSON.stringify(response.user));
+              toast.success('Account created successfully!');
+              navigate('/dashboard');
+              return;
+            }
+          } catch (e) {
+            console.error('Retry failed:', e);
+          }
+        }
+        return;
+      }
       toast.error(error.message || 'Failed to create account');
     }
   };
